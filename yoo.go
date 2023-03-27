@@ -58,7 +58,7 @@ func main() {
 	// default title persona
 	titlePersona := Persona{
 		Name:  "summer-slug",
-		Model: "gpt-4",
+		Model: "gpt-3.5-turbo",
 	}
 
 	// override with configured default persona, if exists
