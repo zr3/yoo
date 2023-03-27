@@ -45,7 +45,7 @@ func main() {
 	err = config.BindStruct("", &yooConfig)
 	checkFatal(err, "yoo had a problem parsing config from '"+configFile+"'")
 
-	flags := []string{"persona", "prompt", "quiet:bool"}
+	flags := []string{"persona", "prompt", "quiet:bool", "no-log:bool"}
 	err = config.LoadFlags(flags)
 	checkWarn(err, "there was an issue parsing flags, so they will be ignored.")
 
@@ -119,19 +119,21 @@ func main() {
 	fmt.Println(promptResponse)
 
 	// write response out to log
-	mainContent := div("prompt") + userPrompt + div("response") + promptResponse + div("system") + systemPrompt
-	titleSystemPrompt, titleSystemPromptFile, err := loadSystemPrompt(home, titlePersona)
-	checkFatal(err, "could not read the configured title system prompt '"+titleSystemPromptFile+"'.")
-	title, err := createChatCompletion(client, titlePersona.Model, titleSystemPrompt, mainContent)
-	checkWarn(err, "could not complete request to openai for title slug")
-	if err != nil {
-		title = "unknown-topic"
+	if !config.Bool("no-log") {
+		mainContent := div("prompt") + userPrompt + div("response") + promptResponse + div("system") + systemPrompt
+		titleSystemPrompt, titleSystemPromptFile, err := loadSystemPrompt(home, titlePersona)
+		checkFatal(err, "could not read the configured title system prompt '"+titleSystemPromptFile+"'.")
+		title, err := createChatCompletion(client, titlePersona.Model, titleSystemPrompt, mainContent)
+		checkWarn(err, "could not complete request to openai for title slug")
+		if err != nil {
+			title = "unknown-topic"
+		}
+		currentTime := time.Now().Local().Format("2006-01-02--15-04-05-MST")
+		logName := home + "/.yoo/" + currentTime + "." + title + ".md"
+		metaContent := "# " + title + "\n\n" + currentTime
+		content := metaContent + mainContent
+		os.WriteFile(logName, []byte(content), 0644)
 	}
-	currentTime := time.Now().Local().Format("2006-01-02--15-04-05-MST")
-	logName := home + "/.yoo/" + currentTime + "." + title + ".md"
-	metaContent := "# " + title + "\n\n" + currentTime
-	content := metaContent + mainContent
-	os.WriteFile(logName, []byte(content), 0644)
 }
 
 func div(title string) string {
