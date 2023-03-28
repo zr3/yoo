@@ -66,6 +66,11 @@ func main() {
 		return
 	}
 
+	if len(os.Args) >= 2 && os.Args[1] == "who" {
+		showPersonaConfig(yooConfig)
+		return
+	}
+
 	selectedPersona, titlePersona := determinePersonas(yooConfig)
 	systemPrompt, systemFile, err := loadSystemPrompt(os.Getenv("HOME"), selectedPersona)
 	check(err, fmt.Sprintf("Could not read the configured system prompt '%s'", systemFile), true)
@@ -125,7 +130,7 @@ func launchLatestLogFile() {
 
 	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
 	if len(matches) > 0 {
-		cmd := exec.Command("less", matches[0])
+		cmd := exec.Command("bat", matches[0])
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -134,6 +139,10 @@ func launchLatestLogFile() {
 	} else {
 		fmt.Println("No log files found.")
 	}
+}
+
+func showPersonaConfig(yooConfig YooConfig) {
+	fmt.Println(yooConfig.DefaultPersona)
 }
 
 func loadYooConfig() (YooConfig, error) {
