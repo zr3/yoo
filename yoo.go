@@ -9,9 +9,11 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/andrew-d/go-termutil"
@@ -77,12 +79,28 @@ func main() {
 
 	userPrompt := getUserPrompt()
 
+	if len(os.Args) >= 2 && os.Args[1] == "--interactive" {
+		runInteractiveMode(userPrompt, yooConfig)
+		return
+	}
+
 	if !config.Bool("quiet") {
 		fmt.Println("...")
 	}
 
 	client := openai.NewClient(yooConfig.Secrets.OpenAIKey)
-	promptResponse, err := createChatCompletion(client, selectedPersona.Model, systemPrompt, userPrompt)
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: systemPrompt,
+		},
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: userPrompt,
+		},
+	}
+
+	promptResponse, err := createChatCompletion(client, selectedPersona.Model, messages)
 	check(err, "Could not complete request to openai", true)
 
 	fmt.Println(promptResponse)
@@ -238,21 +256,101 @@ func check(err error, message string, fatal bool) {
 	}
 }
 
-func createChatCompletion(client *openai.Client, model string, system string, prompt string) (string, error) {
+func runInteractiveMode(initialPrompt string, yooConfig YooConfig) {
+	selectedPersona, titlePersona := determinePersonas(yooConfig)
+	systemPrompt, systemFile, err := loadSystemPrompt(os.Getenv("HOME"), selectedPersona)
+	check(err, fmt.Sprintf("Could not read the configured system prompt '%s'", systemFile), true)
+	titleSystemPrompt, titleSystemFile, err := loadSystemPrompt(os.Getenv("HOME"), titlePersona)
+	check(err, fmt.Sprintf("Could not read the configured title prompt '%s'", titleSystemFile), true)
+
+	client := openai.NewClient(yooConfig.Secrets.OpenAIKey)
+
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: systemPrompt,
+		},
+	}
+
+	if initialPrompt != "" {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleUser,
+			Content: initialPrompt,
+		})
+	}
+
+	scanner := bufio.NewScanner(os.Stdin)
+	exit := make(chan os.Signal, 1)
+
+	signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
+
+	for {
+		userInput := ""
+		select {
+		case <-exit:
+			fmt.Println("\nExiting...")
+			os.Exit(0)
+		default:
+			fmt.Printf("> ")
+			if scanner.Scan() {
+				userInput = scanner.Text()
+			}
+
+			if userInput == "exit" {
+				break
+			}
+
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: userInput,
+			})
+
+			response, err := createChatCompletion(client, selectedPersona.Model, messages)
+			check(err, "Could not complete request to openai", true)
+
+			fmt.Println(response)
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleAssistant,
+				Content: response,
+			})
+		}
+	}
+
+	userLog := strings.Builder{}
+	assistantLog := strings.Builder{}
+	for _, message := range messages {
+		if message.Role == openai.ChatMessageRoleUser {
+			userLog.WriteString(message.Content + "\n")
+		} else if message.Role == openai.ChatMessageRoleAssistant {
+			assistantLog.WriteString(message.Content + "\n")
+		}
+	}
+
+	content := sectionDivider("User Messages") + userLog.String() + sectionDivider("Assistant Messages") + assistantLog.String() + sectionDivider("System Message") + systemPrompt
+	home := os.Getenv("HOME")
+	currentTime := time.Now().Local().Format("2006-01-02--15-04-05-MST")
+	titleMessages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: titleSystemPrompt,
+		},
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: userLog.String(),
+		},
+	}
+
+	title, err := createChatCompletion(client, titlePersona.Model, titleMessages)
+	logName := fmt.Sprintf(promptFileFormat, home, currentTime, "interactive-session-"+title)
+	os.WriteFile(logName, []byte(content), 0644)
+}
+
+func createChatCompletion(client *openai.Client, model string, messages []openai.ChatCompletionMessage) (string, error) {
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: model,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: system,
-				},
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
-				},
-			},
+			Model:    model,
+			Messages: messages,
 		},
 	)
 	if err != nil {
@@ -277,7 +375,17 @@ func logResponse(home string, titlePersona Persona, userPrompt, systemPrompt, pr
 	titleSystemPrompt, titleSystemPromptFile, err := loadSystemPrompt(home, titlePersona)
 	check(err, fmt.Sprintf("Could not read the configured title system prompt '%s'", titleSystemPromptFile), false)
 
-	title, err := createChatCompletion(client, titlePersona.Model, titleSystemPrompt, mainContent)
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: titleSystemPrompt,
+		},
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: mainContent,
+		},
+	}
+	title, err := createChatCompletion(client, titlePersona.Model, messages)
 	check(err, "Could not complete request to openai for title slug", false)
 
 	if err != nil {
