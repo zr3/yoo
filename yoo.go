@@ -8,6 +8,10 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/andrew-d/go-termutil"
@@ -46,6 +50,22 @@ func main() {
 	yooConfig, err := loadYooConfig()
 	check(err, "Error loading YooConfig", true)
 
+	if len(os.Args) >= 2 && os.Args[1] == "config" {
+		os.Args = os.Args[1:]
+
+		persona := getConfigValue("persona", yooConfig.DefaultPersona, false)
+		model := getConfigValue("model", defaultModel, false)
+		system := getConfigValue("system", "", true)
+
+		setPersonaConfig(persona, model, system)
+		return
+	}
+
+	if len(os.Args) >= 2 && os.Args[1] == "latest" {
+		launchLatestLogFile()
+		return
+	}
+
 	selectedPersona, titlePersona := determinePersonas(yooConfig)
 	systemPrompt, systemFile, err := loadSystemPrompt(os.Getenv("HOME"), selectedPersona)
 	check(err, fmt.Sprintf("Could not read the configured system prompt '%s'", systemFile), true)
@@ -65,6 +85,54 @@ func main() {
 	if !config.Bool("no-log") {
 		home := os.Getenv("HOME")
 		logResponse(home, titlePersona, userPrompt, systemPrompt, promptResponse, client)
+	}
+}
+
+func getConfigValue(key, defaultValue string, allowEmpty bool) string {
+	value := config.String(key)
+
+	if value == "" && !allowEmpty {
+		return defaultValue
+	}
+	return value
+}
+
+func setPersonaConfig(persona, model, system string) {
+	home := os.Getenv("HOME")
+
+	// Update system prompt
+	if system != "" {
+		systemFile := fmt.Sprintf(systemPromptFormat, home, persona)
+		ioutil.WriteFile(systemFile, []byte(system), 0644)
+	}
+
+	// Update model
+	if model != "" {
+		configFilePath := fmt.Sprintf(configFileFormat, home)
+		configContentBytes, err := ioutil.ReadFile(configFilePath)
+		check(err, "Error reading the config file for updating persona", true)
+		configContent := string(configContentBytes)
+
+		updatedConfigContent := strings.ReplaceAll(configContent, fmt.Sprintf("model: %s", persona), fmt.Sprintf("model: %s", model))
+		ioutil.WriteFile(configFilePath, []byte(updatedConfigContent), 0644)
+	}
+}
+
+func launchLatestLogFile() {
+	home := os.Getenv("HOME")
+	matches, err := filepath.Glob(fmt.Sprintf("%s/.yoo/*.*.md", home))
+	check(err, "Error listing log files", true)
+
+	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
+	if len(matches) > 0 {
+		cmd := exec.Command("less", matches[0])
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		check(err, "Error launching less with latest log file", true)
+	} else {
+		fmt.Println("No log files found.")
 	}
 }
 
@@ -88,7 +156,7 @@ func loadYooConfig() (YooConfig, error) {
 		return YooConfig{}, fmt.Errorf("yoo had a problem parsing config from '%s': %w", configFilePath, err)
 	}
 
-	flags := []string{"persona", "prompt", "quiet:bool", "no-log:bool"}
+	flags := []string{"persona", "model", "system", "prompt", "quiet:bool", "no-log:bool"}
 	err = config.LoadFlags(flags)
 	if err != nil {
 		check(err, "There was an issue parsing flags, so they will be ignored.", false)
@@ -131,10 +199,12 @@ func determinePersonas(yooConfig YooConfig) (selectedPersona, titlePersona Perso
 
 func getUserPrompt() string {
 	userPrompt := ""
-	if len(os.Args) == 2 {
-		userPrompt += os.Args[1]
-	} else if len(os.Args) > 2 {
-		userPrompt += config.String("prompt")
+	if len(os.Args) >= 3 {
+		if !strings.HasPrefix(os.Args[1], "--") {
+			userPrompt += os.Args[1]
+		} else {
+			userPrompt += config.String("prompt")
+		}
 	}
 
 	if !termutil.Isatty(os.Stdin.Fd()) {
