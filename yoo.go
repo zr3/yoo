@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	termutil "github.com/andrew-d/go-termutil"
@@ -65,7 +66,7 @@ func main() {
 	case Normal:
 		normalMode(loadedResources)
 	case Chat:
-		chatMode()
+		chatMode(loadedResources)
 	case Config:
 		configMode()
 	case Show:
@@ -95,7 +96,8 @@ func normalMode(loadedResources LoadedResources) {
 	promptResponse, err := createChatCompletion(
 		loadedResources.OpenAIClient,
 		loadedResources.ChatPersona,
-		loadedResources.InitialUserPrompt)
+		loadedResources.InitialUserPrompt,
+		[]openai.ChatCompletionMessage{})
 	checkError(err, "could not complete request to openai", true)
 
 	// write response out to console
@@ -110,8 +112,61 @@ func normalMode(loadedResources LoadedResources) {
 	os.WriteFile(logName, []byte(content), 0644)
 }
 
-func chatMode() {
-	log.Fatal("chat mode is not implemented")
+func chatMode(loadedResources LoadedResources) {
+	fmt.Println("chatting with " + loadedResources.ChatPersona.Name + "!")
+	fmt.Println("...")
+
+	history := []openai.ChatCompletionMessage{}
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		// get prompt
+		fmt.Print("\n> ")
+		userPrompt, err := reader.ReadString('\n')
+		checkError(err, "problem reading stdin", true)
+		userPrompt = strings.TrimSpace(userPrompt)
+		if userPrompt == "quit" || userPrompt == "exit" {
+			fmt.Println("chat ended!")
+			break
+		}
+
+		// get the main prompt response
+		promptResponse, err := createChatCompletion(
+			loadedResources.OpenAIClient,
+			loadedResources.ChatPersona,
+			userPrompt,
+			history)
+		checkError(err, "could not complete request to openai", true)
+
+		// write response out to console
+		fmt.Println(promptResponse)
+
+		// add the pair of messages to the history
+		history = append(
+			history,
+			openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: userPrompt,
+			},
+			openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleAssistant,
+				Content: promptResponse,
+			},
+		)
+	}
+
+	// log response to file
+	title := fetchTitleContent(loadedResources)
+	currentTime := time.Now().Local().Format("2006-01-02--15-04-05-MST")
+	logName := loadedResources.LogDir + currentTime + "." + title + ".md"
+	metaContent := "# " + title + "\n\n" + currentTime
+
+	chatHistoryContent := ""
+	for _, message := range history {
+		chatHistoryContent += string(message.Role) + ":\n" + message.Content + "\n\n"
+	}
+
+	content := metaContent + div("chat conversation") + chatHistoryContent + div("system") + loadedResources.ChatPersona.SystemMessage.Content
+	os.WriteFile(logName, []byte(content), 0644)
 }
 
 func configMode() {
@@ -127,7 +182,8 @@ func fetchTitleContent(loadedResources LoadedResources) string {
 	title, err := createChatCompletion(
 		loadedResources.OpenAIClient,
 		loadedResources.TitlePersona,
-		titleContent)
+		titleContent,
+		[]openai.ChatCompletionMessage{})
 	checkError(err, "could not complete request to openai for title slug", false)
 	if title == "" {
 		return "unknown-topic"
@@ -253,18 +309,18 @@ func checkError(err error, message string, isFatal bool) {
 	}
 }
 
-func createChatCompletion(client *openai.Client, persona LoadedPersona, prompt string) (string, error) {
+func createChatCompletion(client *openai.Client, persona LoadedPersona, prompt string, historySlice []openai.ChatCompletionMessage) (string, error) {
+	systemSlice := []openai.ChatCompletionMessage{persona.SystemMessage}
+	userMessage := openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: prompt,
+	}
+	fullHistorySlice := append(systemSlice, historySlice...)
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: persona.Model,
-			Messages: []openai.ChatCompletionMessage{
-				persona.SystemMessage,
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
-				},
-			},
+			Model:    persona.Model,
+			Messages: append(fullHistorySlice, userMessage),
 		},
 	)
 	if err != nil {
