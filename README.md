@@ -2,6 +2,8 @@
 
 a sleek cli tool for gpt interactions. easily create and switch personas. made with go.
 
+Yet Onother OpenAI cli tool (jk)
+
 ## installation
 
 build with go and add `yoo` to `~/.local/bin` or wherever you like to keep things
