@@ -17,9 +17,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
-	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -40,36 +40,52 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// todo: search, list
 		// for now: return latest
-		logPath := viper.GetString("logpath")
-		var latestFile os.FileInfo
-		var latestTime time.Time
-
-		err := filepath.Walk(logPath, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			// If not a directory and file modification time is greater
-			// than the current latest time, update the latest file
-			if !info.IsDir() && info.ModTime().After(latestTime) {
-				latestFile = info
-				latestTime = info.ModTime()
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			log.Fatal("Error walking the directory:", err)
-			return
+		latest := getLatest()
+		pager := viper.GetString("pager")
+		if pager == "" {
+			pager = "less" // fallback
 		}
+		command := exec.Command(pager, latest)
+		command.Stdout = os.Stdout
+		command.Stderr = os.Stderr
 
-		if latestFile != nil {
-			fmt.Println(logPath + latestFile.Name())
-		} else {
-			log.Fatal("No files found in the directory.")
-		}
+		err := command.Start()
+		checkError(err, "couldn't start pager command", true)
+		err = command.Wait()
+		checkError(err, "couldn't run pager command", true)
 	},
+}
+
+func getLatest() string {
+	logPath := viper.GetString("logpath")
+	var latestFile os.FileInfo
+	var latestTime time.Time
+
+	err := filepath.Walk(logPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// If not a directory and file modification time is greater
+		// than the current latest time, update the latest file
+		if !info.IsDir() && info.ModTime().After(latestTime) {
+			latestFile = info
+			latestTime = info.ModTime()
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Fatal("Error walking the directory:", err)
+	}
+
+	if latestFile != nil {
+		return logPath + latestFile.Name()
+	} else {
+		log.Fatal("No files found in the directory.")
+	}
+	return ""
 }
 
 func init() {

@@ -95,7 +95,11 @@ to quickly create a Cobra application.`,
 		if s.Active() {
 			s.Stop()
 		}
-		fmt.Println("╰─ " + promptResponse)
+		output := promptResponse
+		if !viper.GetBool("quiet") {
+			output = "╰─ " + output
+		}
+		fmt.Println(output)
 
 		// set up title persona
 		titlePersonaName := viper.GetString("title-persona")
@@ -138,7 +142,8 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	// uhCmd.PersistentFlags().String("foo", "", "A help for foo")
+	uhCmd.PersistentFlags().String("persona", "", "the persona to use for this call")
+	viper.BindPFlag("persona", uhCmd.PersistentFlags().Lookup("persona"))
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:

@@ -17,13 +17,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-// quickCmd represents the quick command
-var quickCmd = &cobra.Command{
-	Use:   "quick",
+// lastCmd represents the last command
+var lastCmd = &cobra.Command{
+	Use:   "last",
 	Short: "A brief description of your command",
 	Long: `A longer description that spans multiple lines and likely contains examples
 and usage of using your command. For example:
@@ -32,22 +33,20 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		viper.Set("persona", viper.GetString("quick-persona"))
-		uhCmd.Run(uhCmd, args)
+		fmt.Println("last called")
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(quickCmd)
+	chatCmd.AddCommand(lastCmd)
 
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	quickCmd.PersistentFlags().String("persona", "", "the persona to use for this call")
-	viper.BindPFlag("persona", quickCmd.PersistentFlags().Lookup("persona"))
+	// lastCmd.PersistentFlags().String("foo", "", "A help for foo")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// quickCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// lastCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

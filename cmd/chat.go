@@ -172,7 +172,8 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	// chatCmd.PersistentFlags().String("foo", "", "A help for foo")
+	chatCmd.PersistentFlags().String("persona", "", "the persona to use for this call")
+	viper.BindPFlag("persona", chatCmd.PersistentFlags().Lookup("persona"))
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:

@@ -59,6 +59,9 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yoo.yaml)")
 
+	rootCmd.PersistentFlags().Bool("quiet", false, "hide the CLI ux and only show model output (e.g. for commit message)")
+	viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
+
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
