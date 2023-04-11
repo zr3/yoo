@@ -17,7 +17,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -25,6 +28,7 @@ import (
 
 // personaCmd represents the persona command
 var personaCmd = &cobra.Command{
+	Args:  cobra.MaximumNArgs(1),
 	Use:   "persona",
 	Short: "A brief description of your command",
 	Long: `A longer description that spans multiple lines and likely contains examples
@@ -34,11 +38,43 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("persona called")
-		fmt.Println(viper.GetString("default-persona"))
+		if len(args) == 0 {
+			fmt.Println(viper.GetString("persona"))
+			return
+		} else {
+			persona := args[0]
+			// if persona doesn't exist, ask if should create
+			// bail if no
+			if viper.GetString("personas."+persona)+".model" == "" {
+				fmt.Println("persona [" + persona + "] doesn't exist. add it?")
+				if !confirmWithUser() {
+					return
+				}
+			}
+			// confirm existing model, or add new model
+			// model := "gpt-4"
+			// open system message in editor w vim fallback
+			return
+		}
 	},
 }
 
+func confirmWithUser() bool {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("\n≫ ")
+		userPrompt, err := reader.ReadString('\n')
+		checkError(err, "problem reading stdin", true)
+		userPrompt = strings.TrimSpace(userPrompt)
+		if userPrompt == "quit" || userPrompt == "exit" || userPrompt == "n" || userPrompt == "N" {
+			return false
+		} else if userPrompt == "y" || userPrompt == "Y" {
+			return true
+		} else {
+			fmt.Println("please enter 'y' or 'n'")
+		}
+	}
+}
 func init() {
 	configCmd.AddCommand(personaCmd)
 
