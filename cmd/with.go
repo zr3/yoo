@@ -17,13 +17,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // withCmd represents the with command
 var withCmd = &cobra.Command{
+	Args:  cobra.ExactArgs(1),
 	Use:   "with",
 	Short: "A brief description of your command",
 	Long: `A longer description that spans multiple lines and likely contains examples
@@ -33,7 +33,8 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("with called")
+		viper.Set("persona", args[0])
+		chatCmd.Run(chatCmd, []string{})
 	},
 }
 
