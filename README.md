@@ -42,3 +42,14 @@ prompt using a particular persona without changing default:
 `git diff --cached > yoo --persona commit-message`
 `cat a-long-file.txt > yoo --persona summarize`
 
+## todo
+
+- `--title` parameter that sets the slugged log file parameter
+
+### `yoo chat` features
+
+- `reset`: output the chat so far and reset the history as a new conversation
+- `code <filename>`: output the contents of the biggest markdown code block in the last response
+- prefix all chat commands with `:` like Vim
+- color prompts
+- save after every response, not only on exit
